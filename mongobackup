@@ -7,6 +7,7 @@
 ### VARIABLES
 D=false
 LOGGER="/usr/bin/logger -t $0"
+MONGODUMP="/usr/bin/mongodump"
 
 #### FUNCTIONS
 echoYellow () {
@@ -60,7 +61,7 @@ while getopts "d:f:v" optname ; do
  case "$optname" in
   "f") FOLDER=$OPTARG
        ;;
-  "a") DATABASES=$OPTARG
+  "d") DATABASES=$OPTARG
        ;;
   "v") D=true
        ;;
@@ -89,6 +90,64 @@ function getMongoVersion () {
   VERSION=$( mongo --version | egrep -o "[0-9\.]+$" ) 
 }
 
-getMongoVersion
+function getTimeStamp () {
+  TIMESTAMP=$( date +%Y%m%d-%H%M )
+}
 
-echo "Versión de mongo $VERSION"
+function checkFolder () {
+  if [ -d "$FOLDER" ] ; then
+    echoGreen "$FOLDER"
+  else
+    D=true
+    echoRed "Missing folder '$FOLDER'"
+    exit 1
+  fi
+}
+
+function backupDatabases () {
+  OLDIFS=$IFS
+  IFS=','
+  for i in $DATABASES ; do 
+    getTimeStamp
+    DFOLDER="$FOLDER/$TIMESTAMP-$i-mongo$VERSION"
+    mkdir -p $DFOLDER
+
+    if [ $? -ne 0  ] ; then
+      D=true
+      echoRed "Could not create folder: '$DFOLDER'"
+      exit 1
+    fi
+
+
+    if $D ; then
+      $MONGODUMP -o $DFOLDER -d $i
+    else
+      $MONGODUMP -o $DFOLDER -d $i > /dev/null 2>&1
+    fi
+
+    if [ $? -ne 0 ] ; then
+      D=true
+      echoRed "Error Backing up '$i'"
+      exit 1
+    fi
+    
+    echoGreen "$i Backed up!"
+
+  done
+  IFS=$OLDIFS
+}
+
+getMongoVersion
+getTimeStamp
+
+echoStep "Mongo detected version: "
+echoBlue "'$VERSION'"
+echoStep "TimeStamp: "
+echoBlue "'$TIMESTAMP'"
+echoStep "Backup folder: "
+checkFolder
+echoStep "Databases to backup: "
+echoBlue "'$DATABASES'"
+echoStep "Backingup databases: "
+backupDatabases
+
