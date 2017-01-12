@@ -9,6 +9,7 @@ D=false
 SCRIPT=$0
 LOGGER="/usr/bin/logger -t $SCRIPT"
 MONGODUMP="/usr/bin/mongodump"
+COMPRESS="7za a "
 
 #### FUNCTIONS
 echoYellow () {
@@ -137,9 +138,24 @@ function backupDatabases () {
       echoRed "Error Backing up '$i'" >&2
       exit 1
     fi
-   
+
     IFS=$OLDIFS 
     echoGreen "$i backed up!"
+    echoStep "Compressing $DFOLDER"
+    if $D ; then
+      $COMPRESS $DFOLDER.7z $DFOLDER
+    else
+      $COMPRESS $DFOLDER.7z $DFOLDER > /dev/null 2>&1
+    fi     
+
+    if [ $? -ne 0 ] ; then
+      D=true
+      echoRed "Error compressing '$DFOLDER.7z'" >&2
+      exit 1
+    else
+      echoGreen "$i compressed!"
+      rm -Rf $DFOLDER > /dev/null 2>&1
+    fi
     IFS=','
 
   done
@@ -147,7 +163,12 @@ function backupDatabases () {
 }
 
 function eraseOldBackups () {
-  find $FOLDER/* -type d -mtime +$OLDER 
+  if $D ; then
+    find $FOLDER/* -type d -mtime +$OLDER | xargs rm -Rf
+  else
+    find $FOLDER/* -type d -mtime +$OLDER | xargs rm -Rf 2>&1
+  fi
+    
   if [ $? -ne 0 ] ; then
     D=true
     echoRed "Error erasing backups!" >&2
@@ -159,7 +180,7 @@ function eraseOldBackups () {
 
 getMongoVersion
 getTimeStamp
-
+echoD " "
 echoStep "Mongo detected version: "
 echoBlue "'$VERSION'"
 echoStep "TimeStamp: "
@@ -168,8 +189,9 @@ echoStep "Backup folder: "
 checkFolder
 echoStep "Databases to backup: "
 echoBlue "'$DATABASES'"
-echoStep "Erasing backups older than: "
+echoStep "Erase backups older than: "
 echoBlue "$OLDER days"
+echoD " "
 
 echoStep "Backing up databases: "
 backupDatabases
