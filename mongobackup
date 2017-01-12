@@ -59,7 +59,7 @@ usage () {
   echo 
   echo "  This will execute the command at 2 am everyday,\n"
   echo "  using /opt/backup as destination folder,\n"
-  echo "  backing up 'my_db' database,\n"
+  echo "  backing up 'my_db' database into a 7z file,\n"
   echo "  erasing backups older than 2 days."
   echo
 }
@@ -164,9 +164,10 @@ function backupDatabases () {
 
 function eraseOldBackups () {
   if $D ; then
-    find $FOLDER/*.7z -type f -mtime +$OLDER | xargs rm -Rf
+    find $FOLDER/*.7z -type f -ctime +$OLDER
+    find $FOLDER/*.7z -type f -ctime +$OLDER | xargs rm -Rf
   else
-    find $FOLDER/*.7z -type f -mtime +$OLDER | xargs rm -Rf 2>&1
+    find $FOLDER/*.7z -type f -ctime +$OLDER | xargs rm -Rf 2>&1
   fi
     
   if [ $? -ne 0 ] ; then
