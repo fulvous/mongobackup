@@ -1,0 +1,90 @@
+#!/bin/sh
+
+# Leon Ramos
+# leon.ramos@creadoresdigitales.com
+# 2017
+
+### VARIABLES
+D=false
+LOGGER="/usr/bin/logger -t $0"
+
+#### FUNCTIONS
+echoYellow () {
+  $D && /bin/echo -e "\e[33m$1\e[0m"
+  $LOGGER "$1"
+}
+
+echoBlue () {
+  $D && /bin/echo -e "\e[34m$1\e[0m"
+  $LOGGER "$1"
+}
+
+echoGreen () {
+  $D && /bin/echo -e "\e[32m$1\e[0m"
+  $LOGGER "$1"
+}
+
+echoRed () {
+  $D && /bin/echo -e "\e[91m$1\e[0m"
+  $LOGGER "$1"
+}
+
+echoStep () {
+  $D && /bin/echo -ne "\e[1m$1\e[0m"
+  $LOGGER "$1"
+}
+
+echoD () {
+  $D && /bin/echo "$1" 
+  $LOGGER "$1"
+}
+
+usage () {
+  echoStep "Usage: $0"
+  echo " [-f backup_folder] [-d databases] [-v]"
+  echo 
+  echo "This script backs up and rotate mongo databases"
+  echo 
+  echo "   -f sets the backup folder"
+  echo "   -d Databases to backup separated by commas"
+  echo "   -v Shows verbose information"
+  echo
+}
+
+
+while getopts "d:f:v" optname ; do
+ case "$optname" in
+  "f") FOLDER=$OPTARG
+       ;;
+  "a") DATABASES=$OPTARG
+       ;;
+  "v") D=true
+       ;;
+  "?")
+       echo >&2
+       echo "===============" >&2
+       echoRed "ERROR: Unkown option." >&2
+       echo "===============" >&2
+       echo >&2
+       usage
+       exit 1
+       ;;
+ esac
+done
+
+
+if [ -z "$FOLDER" ] || [ -z "$DATABASES" ] ; then
+  D=true
+  echoRed "Missing parameters"
+  usage
+  exit 1
+fi
+
+
+function getMongoVersion () {
+  VERSION=$( mongo --version | egrep -o "[0-9\.]+$" ) 
+}
+
+getMongoVersion
+
+echo "Versión de mongo $VERSION"
