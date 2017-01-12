@@ -49,6 +49,10 @@ usage () {
   echo "   -d Databases to backup separated by commas"
   echo "   -v Shows verbose information"
   echo
+  echo "Example for /etc/crontab: "
+  echo
+  echo "  0 2 * * * root /usr/local/sbin/$0 -f /opt/backup -d my_db"
+  echo 
 }
 
 
