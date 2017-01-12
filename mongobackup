@@ -6,7 +6,8 @@
 
 ### VARIABLES
 D=false
-LOGGER="/usr/bin/logger -t $0"
+SCRIPT=$0
+LOGGER="/usr/bin/logger -t $SCRIPT"
 MONGODUMP="/usr/bin/mongodump"
 
 #### FUNCTIONS
@@ -42,34 +43,40 @@ echoD () {
 
 usage () {
   echoStep "Usage: $0"
-  echo " [-f backup_folder] [-d databases] [-v]"
+  echo " [-f backup_folder] [-d databases] [-o older_than] [-v]"
   echo 
   echo "This script backs up and rotate mongo databases"
   echo 
   echo "   -f sets the backup folder"
   echo "   -d Databases to backup separated by commas"
+  echo "   -o Erase backups older than this number of days"
   echo "   -v Shows verbose information"
   echo
   echo "Example for /etc/crontab: "
   echo
-  echo "  0 2 * * * root /usr/local/sbin/$0 -f /opt/backup -d my_db"
+  echo "  0 2 * * * root /full_path/$0 -f /opt/backup -d my_db -o 2"
   echo 
+  echo "  This will execute the command at 2 am everyday,\n"
+  echo "  using /opt/backup as destination folder,\n"
+  echo "  backing up 'my_db' database,\n"
+  echo "  erasing backups older than 2 days."
+  echo
 }
 
 
-while getopts "d:f:v" optname ; do
+while getopts "d:f:o:v" optname ; do
  case "$optname" in
   "f") FOLDER=$OPTARG
        ;;
   "d") DATABASES=$OPTARG
        ;;
+  "o") OLDER=$OPTARG
+       ;;
   "v") D=true
        ;;
   "?")
-       echo >&2
-       echo "===============" >&2
+       D=true
        echoRed "ERROR: Unkown option." >&2
-       echo "===============" >&2
        echo >&2
        usage
        exit 1
@@ -78,9 +85,9 @@ while getopts "d:f:v" optname ; do
 done
 
 
-if [ -z "$FOLDER" ] || [ -z "$DATABASES" ] ; then
+if [ -z "$FOLDER" ] || [ -z "$DATABASES" ] || [ -z "$OLDER" ] ; then
   D=true
-  echoRed "Missing parameters"
+  echoRed "Missing parameters" >&2
   usage
   exit 1
 fi
@@ -99,7 +106,7 @@ function checkFolder () {
     echoGreen "$FOLDER"
   else
     D=true
-    echoRed "Missing folder '$FOLDER'"
+    echoRed "Missing folder '$FOLDER'" >&2
     exit 1
   fi
 }
@@ -114,7 +121,7 @@ function backupDatabases () {
 
     if [ $? -ne 0  ] ; then
       D=true
-      echoRed "Could not create folder: '$DFOLDER'"
+      echoRed "Could not create folder: '$DFOLDER'" >&2
       exit 1
     fi
 
@@ -127,14 +134,27 @@ function backupDatabases () {
 
     if [ $? -ne 0 ] ; then
       D=true
-      echoRed "Error Backing up '$i'"
+      echoRed "Error Backing up '$i'" >&2
       exit 1
     fi
-    
-    echoGreen "$i Backed up!"
+   
+    IFS=$OLDIFS 
+    echoGreen "$i backed up!"
+    IFS=','
 
   done
   IFS=$OLDIFS
+}
+
+function eraseOldBackups () {
+  find $FOLDER/* -type d -mtime +$OLDER 
+  if [ $? -ne 0 ] ; then
+    D=true
+    echoRed "Error erasing backups!" >&2
+    exit 1
+  else
+    echoGreen "Removed!"
+  fi
 }
 
 getMongoVersion
@@ -148,6 +168,11 @@ echoStep "Backup folder: "
 checkFolder
 echoStep "Databases to backup: "
 echoBlue "'$DATABASES'"
-echoStep "Backingup databases: "
+echoStep "Erasing backups older than: "
+echoBlue "$OLDER days"
+
+echoStep "Backing up databases: "
 backupDatabases
 
+echoStep "Erasing old databases: "
+eraseOldBackups
