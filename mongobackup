@@ -164,9 +164,9 @@ function backupDatabases () {
 
 function eraseOldBackups () {
   if $D ; then
-    find $FOLDER/* -type d -mtime +$OLDER | xargs rm -Rf
+    find $FOLDER/*.7z -type f -mtime +$OLDER | xargs rm -Rf
   else
-    find $FOLDER/* -type d -mtime +$OLDER | xargs rm -Rf 2>&1
+    find $FOLDER/*.7z -type f -mtime +$OLDER | xargs rm -Rf 2>&1
   fi
     
   if [ $? -ne 0 ] ; then
