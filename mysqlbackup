@@ -1,0 +1,209 @@
+#!/bin/sh
+
+# Leon Ramos
+# leon.ramos@creadoresdigitales.com
+# 2017
+
+### VARIABLES
+D=false
+SCRIPT=$0
+LOGGER="/usr/bin/logger -t $SCRIPT "
+MYSQLDUMP="/usr/bin/mysqldump"
+MYSQL="/usr/bin/mysql"
+COMPRESS="7za a "
+
+#### FUNCTIONS
+echoYellow () {
+  $D && /bin/echo -e "\e[33m$1\e[0m"
+  $LOGGER "$1"
+}
+
+echoBlue () {
+  $D && /bin/echo -e "\e[34m$1\e[0m"
+  $LOGGER "$1"
+}
+
+echoGreen () {
+  $D && /bin/echo -e "\e[32m$1\e[0m"
+  $LOGGER "$1"
+}
+
+echoRed () {
+  $D && /bin/echo -e "\e[91m$1\e[0m"
+  $LOGGER "$1"
+}
+
+echoStep () {
+  $D && /bin/echo -ne "\e[1m$1\e[0m"
+  $LOGGER "$1"
+}
+
+echoD () {
+  $D && /bin/echo "$1" 
+  $LOGGER "$1"
+}
+
+usage () {
+  echoStep "Usage: $0"
+  echo " -f backup_folder -d databases -o older_than [-u username] [-p password] [-v]"
+  echo 
+  echo "This script backs up and rotate mongo databases"
+  echo 
+  echo "   -f sets the backup folder"
+  echo "   -d Databases to backup separated by commas"
+  echo "   -o Erase backups older than this number of days"
+  echo "   -u Username to connect to MySql"
+  echo "   -p Password for connection"
+  echo "   -v Shows verbose information"
+  echo
+  echo "Example for /etc/crontab: "
+  echo
+  echo "  0 2 * * * root /full_path/$0 -f /opt/backup -d my_db -o 2"
+  echo 
+  echo "  This will execute the command at 2 am everyday,\n"
+  echo "  using /opt/backup as destination folder,\n"
+  echo "  backing up 'my_db' database into a 7z file,\n"
+  echo "  erasing backups older than 2 days."
+  echo
+}
+
+
+while getopts "d:f:o:u:p:v" optname ; do
+ case "$optname" in
+  "f") FOLDER=$OPTARG
+       ;;
+  "d") DATABASES=$OPTARG
+       ;;
+  "o") OLDER=$OPTARG
+       ;;
+  "u") USER=$OPTARG
+       ;;
+  "p") PASSWORD=$OPTARG
+       ;;
+  "v") D=true
+       ;;
+  "?")
+       D=true
+       echoRed "ERROR: Unkown option." >&2
+       echo >&2
+       usage
+       exit 1
+       ;;
+ esac
+done
+
+
+if [ -z "$FOLDER" ] || [ -z "$DATABASES" ] || [ -z "$OLDER" ] ; then
+  D=true
+  echoRed "Missing parameters" >&2
+  usage
+  exit 1
+fi
+
+
+getMysqlVersion () {
+  VERSION=$( ${MYSQL} --version | egrep -o "Ver\s+[0-9\.]+\s+Distrib" | egrep -o "[0-9\.]+" ) 
+}
+
+getTimeStamp () {
+  TIMESTAMP=$( date +%Y%m%d-%H%M )
+}
+
+checkFolder () {
+  if [ -d "$FOLDER" ] ; then
+    echoGreen "$FOLDER"
+  else
+    D=true
+    echoRed "Missing folder '$FOLDER'" >&2
+    exit 1
+  fi
+}
+
+backupDatabases () {
+  OLDIFS=$IFS
+  IFS=','
+  for i in $DATABASES ; do 
+    getTimeStamp
+    DFOLDER="$FOLDER/$TIMESTAMP-$i-mysql$VERSION"
+    mkdir -p $DFOLDER
+
+    if [ $? -ne 0  ] ; then
+      D=true
+      echoRed "Could not create folder: '$DFOLDER'" >&2
+      exit 1
+    fi
+
+    if [ -z $USER ] || [ -z $PASSWORD ] ; then
+      $MYSQLDUMP $i > $DFOLDER/${i}.sql
+    else
+      $MYSQLDUMP -u $USER --password=$PASSWORD $i > $DFOLDER/${i}.sql
+    fi
+
+    if [ $? -ne 0 ] ; then
+      D=true
+      echoRed "Error Backing up '$i', Remember to create file: /root/.my.cnf as follows:" >&2
+      echoRed "[mysqldump]" >&2
+      echoRed "password='my_password'" >&2 
+      exit 1
+    fi
+
+    IFS=$OLDIFS 
+    echoGreen "$i backed up!"
+    echoStep "Compressing $DFOLDER"
+    if $D ; then
+      $COMPRESS $DFOLDER.7z $DFOLDER
+    else
+      $COMPRESS $DFOLDER.7z $DFOLDER > /dev/null 2>&1
+    fi     
+
+    if [ $? -ne 0 ] ; then
+      D=true
+      echoRed "Error compressing '$DFOLDER.7z'" >&2
+      exit 1
+    else
+      echoGreen "$i compressed!"
+      rm -Rf $DFOLDER > /dev/null 2>&1
+    fi
+    IFS=','
+
+  done
+  IFS=$OLDIFS
+}
+
+eraseOldBackups () {
+  if $D ; then
+    find $FOLDER/*.7z -type f -ctime +$OLDER
+    find $FOLDER/*.7z -type f -ctime +$OLDER | xargs rm -Rf
+  else
+    find $FOLDER/*.7z -type f -ctime +$OLDER | xargs rm -Rf 2>&1
+  fi
+    
+  if [ $? -ne 0 ] ; then
+    D=true
+    echoRed "Error erasing backups!" >&2
+    exit 1
+  else
+    echoGreen "Removed!"
+  fi
+}
+
+getMysqlVersion
+getTimeStamp
+echoD " "
+echoStep "Mysql detected version: "
+echoBlue "'$VERSION'"
+echoStep "TimeStamp: "
+echoBlue "'$TIMESTAMP'"
+echoStep "Backup folder: "
+checkFolder
+echoStep "Databases to backup: "
+echoBlue "'$DATABASES'"
+echoStep "Erase backups older than: "
+echoBlue "$OLDER days"
+echoD " "
+
+echoStep "Backing up databases: "
+backupDatabases
+
+echoStep "Erasing old databases: "
+eraseOldBackups
