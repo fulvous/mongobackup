@@ -45,15 +45,13 @@ echoD () {
 
 usage () {
   echoStep "Usage: $0"
-  echo " -f backup_folder -d databases -o older_than [-u username] [-p password] [-v]"
+  echo " -f backup_folder -d databases -o older_than [-v]"
   echo 
   echo "This script backs up and rotate mongo databases"
   echo 
   echo "   -f sets the backup folder"
   echo "   -d Databases to backup separated by commas"
   echo "   -o Erase backups older than this number of days"
-  echo "   -u Username to connect to MySql"
-  echo "   -p Password for connection"
   echo "   -v Shows verbose information"
   echo
   echo "Example for /etc/crontab: "
@@ -68,17 +66,13 @@ usage () {
 }
 
 
-while getopts "d:f:o:u:p:v" optname ; do
+while getopts "d:f:o:v" optname ; do
  case "$optname" in
   "f") FOLDER=$OPTARG
        ;;
   "d") DATABASES=$OPTARG
        ;;
   "o") OLDER=$OPTARG
-       ;;
-  "u") USER=$OPTARG
-       ;;
-  "p") PASSWORD=$OPTARG
        ;;
   "v") D=true
        ;;
@@ -133,12 +127,7 @@ backupDatabases () {
       exit 1
     fi
 
-    if [ -z $USER ] || [ -z $PASSWORD ] ; then
-      $MYSQLDUMP $i > $DFOLDER/${i}.sql
-    else
-      $MYSQLDUMP -u $USER --password=$PASSWORD $i > $DFOLDER/${i}.sql
-    fi
-
+    $MYSQLDUMP $i > $DFOLDER/${i}.sql
     if [ $? -ne 0 ] ; then
       D=true
       echoRed "Error Backing up '$i', Remember to create file: /root/.my.cnf as follows:" >&2
